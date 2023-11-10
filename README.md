@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![codecov](https://codecov.io/gh/AzideCupric/expiringdictx/branch/main/graph/badge.svg?token=QCFIODJOOA)](https://codecov.io/gh/AzideCupric/expiringdictx)
+[![codecov](https://codecov.io/gh/AzideCupric/expiringdictx/graph/badge.svg?token=879N3D5BJK)](https://codecov.io/gh/AzideCupric/expiringdictx)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/AzideCupric/expiringdictx/test.yml?branch=main)](https://github.com/AzideCupric/expiringdictx/actions/workflows/test.yml)
 [![PyPI version](https://badge.fury.io/py/expiringdictx.svg)](https://badge.fury.io/py/expiringdictx)
 [![Python version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)

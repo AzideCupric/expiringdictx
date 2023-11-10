@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "expiringdictx"
-version = "0.1.0"
+version = "1.0.0"
 description = "提供一个带有过期时间的字典数据结构，适用于缓存和临时存储。"
 authors = ["AzideCupric <rukuy@qq.com>"]
 license = "MIT"
