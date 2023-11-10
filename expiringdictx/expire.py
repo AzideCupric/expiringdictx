@@ -91,10 +91,10 @@ class ExpiringDict(Generic[KT, VT]):
                 self.__insert_with_age(k, value, None)
 
     @exlock
-    def __getitem__(self, key: KT) -> VT | None:
+    def __getitem__(self, key: KT) -> VT:
         if self._is_expired(key):
             del self._lru[key]
-            return None
+            raise KeyError(key)
         return self._lru[key][0]
 
     @exlock
@@ -112,6 +112,10 @@ class ExpiringDict(Generic[KT, VT]):
     @cleanup_expired
     def __iter__(self):
         return iter(self._lru.keys())
+
+    @exlock
+    def __str__(self):
+        return f"ExpiringDict({self._lru}, default_age={self.default_age}, capacity={self.capacity})"
 
     @exlock
     def _cleanup_expired(self):
@@ -172,12 +176,21 @@ class ExpiringDict(Generic[KT, VT]):
         """Refresh the expiry time of an existing key.
 
         When `new_age` is None, the default age is used. Otherwise, the new age is used.
+        If remaining time is longer than the new age, the remaining time is used.
         """
         if key not in self._lru:
             raise KeyError(key)
 
-        value, _ = self._lru[key]
-        self.__insert_with_age(key, value, new_age)
+        if isinstance(new_age, int):
+            new_age = timedelta(seconds=new_age)
+        elif isinstance(new_age, timedelta):
+            pass
+        else:
+            new_age = self.default_age
+
+        value, deadtime = self._lru[key]
+        if deadtime - datetime.now() < new_age:
+            self._lru[key] = value, datetime.now() + new_age
 
     @exlock
     def clear(self):
@@ -229,11 +242,11 @@ class ExpiringDict(Generic[KT, VT]):
         return self._lru[key][1]
 
     @exlock
-    def get(self, key: KT) -> VT | None:
+    def get(self, key: KT, default: VT | None = None) -> VT | None:
         """Return the value for key if key is in the dictionary, else None."""
         if self._is_expired(key):
             del self._lru[key]
-            return None
+            return default
         return self._lru[key][0]
 
     @exlock
@@ -296,7 +309,7 @@ class ExpiringDict(Generic[KT, VT]):
         cls,
         exd: "ExpiringDict[KT, VT]",
         /,
-        default_age: timedelta | int,
+        default_age: timedelta | int | None = None,
         capacity: int | None = None,
         callback: Callbackable[KT, VT] | None = None,
     ) -> Self:
@@ -305,9 +318,9 @@ class ExpiringDict(Generic[KT, VT]):
         old expiringdict's callback will lost.
         """
         if callback is not None:
-            instance = cls(capacity or exd.capacity, default_age, callback or callback)
+            instance = cls(capacity or exd.capacity, default_age or exd.default_age, callback or callback)
         else:
-            instance = cls(capacity or exd.capacity, default_age)
+            instance = cls(capacity or exd.capacity, default_age or exd.default_age)
         now = datetime.now()
         for key, (value, expiry_time) in exd.viewitems():
             if expiry_time < now:

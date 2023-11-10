@@ -40,3 +40,6 @@ class SimpleCache:
                 return value_convert_func(value)
             return value
         return default
+
+    def clear(self):
+        self._cache.clear()

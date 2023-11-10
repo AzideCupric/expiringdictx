@@ -20,6 +20,7 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "License :: OSI Approved :: MIT License",
 ]
+include = ["expiringdictx"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -31,6 +32,14 @@ isort = "^5.10.1"
 black = "^23.1.0"
 nonemoji = "^0.1.2"
 pre-commit = "^3.1.0"
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.4.3"
+pytest-cov = "^4.1.0"
+pytest-mock = "^3.12.0"
+pytest-xdist = "^3.3.1"
+loguru = "^0.7.2"
 
 [tool.black]
 line-length = 120
