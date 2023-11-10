@@ -1,0 +1,63 @@
+[tool.poetry]
+name = "expiringdictx"
+version = "0.1.0"
+description = "提供一个带有过期时间的字典数据结构，适用于缓存和临时存储。"
+authors = ["AzideCupric <rukuy@qq.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/AzideCupric/expiringdictx"
+repository = "https://github.com/AzideCupric/expiringdictx"
+documentation = "https://github.com/AzideCupric/expiringdictx"
+keywords = ["expire", "dict", "lru"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "License :: OSI Approved :: MIT License",
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+lru-dict = "^1.3.0"
+
+[tool.poetry.group.lint.dependencies]
+ruff = "^0.1.0"
+isort = "^5.10.1"
+black = "^23.1.0"
+nonemoji = "^0.1.2"
+pre-commit = "^3.1.0"
+
+[tool.black]
+line-length = 120
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120
+length_sort = true
+skip_gitignore = true
+force_sort_within_sections = true
+extra_standard_library = ["typing_extensions"]
+
+[tool.ruff]
+select = ["E", "W", "F", "UP", "C", "T", "PYI", "PT", "Q"]
+ignore = ["C901", "W191", "E111", "E114", "E117", "D206", "D300", "Q000", "Q001", "Q002", "Q003", "COM812", "COM819", "ISC001", "ISC002"]
+
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[build-system]
+requires = ["poetry_core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,334 @@
+from functools import wraps
+from threading import RLock
+from typing_extensions import Self
+from typing import Generic, TypeVar
+from datetime import datetime, timedelta
+from collections.abc import Mapping, Callable
+
+from lru import LRU
+
+KT = TypeVar("KT")
+VT = TypeVar("VT")
+Callbackable = Callable[[KT, tuple[VT, datetime]], None]
+
+
+def cleanup_expired(expiringdict_method):
+    """Decorator to cleanup expired items before calling the wrapped method.
+
+    It already acquires the lock, so no need to do it again in the wrapped method.
+    """
+
+    @wraps(expiringdict_method)
+    def wrapper(self: "ExpiringDict", *args, **kwargs):
+        self._cleanup_expired()
+        return expiringdict_method(self, *args, **kwargs)
+
+    return wrapper
+
+
+def exlock(expiringdict_method):
+    """Decorator to acquire the lock before calling the wrapped method."""
+
+    @wraps(expiringdict_method)
+    def wrapper(self: "ExpiringDict", *args, **kwargs):
+        with self.lock:
+            return expiringdict_method(self, *args, **kwargs)
+
+    return wrapper
+
+
+class ExpiringDict(Generic[KT, VT]):
+    """A thread-safe dictionary with auto-expiring values for caching purposes.
+
+    Expiration happens on any access, object is locked during cleanup from expired
+    values.
+
+    When the item insert into a full capacity dictionary, the least recently used item
+    will be removed.
+
+    :param capacity: The maximum number of items the dictionary can hold.
+    :param default_age: The default age of the items in the dictionary.
+    :param callback: A function called when an item is operated.
+        The function must accept two positional arguments:
+        `key` and `value`. The function is called only during normal operations,
+        i.e. when an item is accessed before it is removed.
+        See by `lru.LRU` for more details.
+
+    >>> from expiringdictx import ExpiringDict
+    >>> from datetime import timedelta
+    >>> d = ExpiringDict(max_len=100, default_age=timedelta(seconds=10))
+    >>> d["key1"] = "value1" # key expires in 10 seconds
+    >>> d["key2", timedelta(minutes=5)] = "value2" # key expires in 5 minutes
+    >>> d["key3", 5] = "value3" # key expires in 5 seconds
+    >>> sleep(5)
+    >>> print(d["key3"]) # print None
+    """
+
+    def __init__(
+        self,
+        capacity: int,
+        default_age: timedelta | int,
+        callback: Callbackable[KT, VT] | None = None,
+    ) -> None:
+        if callback is not None:
+            self._lru: LRU[KT, tuple[VT, datetime]] = LRU(capacity, callback)
+        else:
+            self._lru: LRU[KT, tuple[VT, datetime]] = LRU(capacity)
+        self.default_age = default_age if isinstance(default_age, timedelta) else timedelta(seconds=default_age)
+        self.lock = RLock()
+
+    @property
+    def capacity(self) -> int:
+        """The maximum number of items the dictionary can hold."""
+        return self._lru.get_size()
+
+    @exlock
+    def __setitem__(self, _key: tuple[KT, timedelta | int] | KT, value: VT) -> None:
+        match _key:
+            case k, e:
+                self.__insert_with_age(k, value, e)
+            case k:
+                self.__insert_with_age(k, value, None)
+
+    @exlock
+    def __getitem__(self, key: KT) -> VT | None:
+        if self._is_expired(key):
+            del self._lru[key]
+            return None
+        return self._lru[key][0]
+
+    @exlock
+    def __delitem__(self, key: KT) -> None:
+        del self._lru[key]
+
+    @cleanup_expired
+    def __contains__(self, key: KT) -> bool:
+        return key in self._lru
+
+    @cleanup_expired
+    def __len__(self) -> int:
+        return len(self._lru)
+
+    @cleanup_expired
+    def __iter__(self):
+        return iter(self._lru.keys())
+
+    @exlock
+    def _cleanup_expired(self):
+        """Remove expired items from the dictionary.
+
+        The `cleanup_expired` decorator calls this method before calling the wrapped method.
+        """
+        current_time = datetime.now()
+        expire_keys = [key for key, (_, expiry_time) in self._lru.items() if expiry_time < current_time]
+        for key in expire_keys:
+            del self._lru[key]
+
+    @cleanup_expired
+    def items(self):
+        """Return a copy of the expiringdict's list of (key, value) pairs."""
+        return [(item[0], item[1][0]) for item in self._lru.items()]
+
+    @cleanup_expired
+    def viewitems(self):
+        """Exd.items() -> a set-like object providing a view on Exd's items"""
+        return dict(self._lru).items()
+
+    @cleanup_expired
+    def keys(self):
+        """Return a copy of the expiringdict's list of keys."""
+        return self._lru.keys()
+
+    @cleanup_expired
+    def viewkeys(self):
+        """Exd.keys() -> a set-like object providing a view on Exd's keys"""
+        return dict(self._lru).keys()
+
+    @cleanup_expired
+    def values(self):
+        """Return a copy of the expiringdict's list of values."""
+        return [value[0] for value in self._lru.values()]
+
+    @cleanup_expired
+    def viewvalues(self):
+        """Exd.values() -> an object providing a view on Exd's values"""
+        return dict(self._lru).values()
+
+    @exlock
+    def update(self, updateable: Mapping[KT, VT | tuple[VT, int] | tuple[VT, timedelta]], /) -> None:
+        """Update the dictionary with the key/value pairs from a mapping object.
+
+        When value is a tuple, the second element is the age of the item.
+        """
+        for key, value in updateable.items():
+            match value:
+                case v, e:
+                    self.__insert_with_age(key, v, e)
+                case v:
+                    self.__insert_with_age(key, v, None)
+
+    @cleanup_expired
+    def refresh(self, key: KT, new_age: timedelta | int | None = None) -> None:
+        """Refresh the expiry time of an existing key.
+
+        When `new_age` is None, the default age is used. Otherwise, the new age is used.
+        """
+        if key not in self._lru:
+            raise KeyError(key)
+
+        value, _ = self._lru[key]
+        self.__insert_with_age(key, value, new_age)
+
+    @exlock
+    def clear(self):
+        """Remove all items from the dictionary."""
+        self._lru.clear()
+
+    @exlock
+    def pop(self, key: KT, default: VT | None = None) -> VT | None:
+        """Remove specified key and return the corresponding value.
+
+        If key is not found, default is returned if given, otherwise KeyError is raised.
+        """
+        p = self._lru.pop(key, default)
+        if isinstance(p, tuple):
+            return p[0]
+        return p
+
+    @exlock
+    def popitem(self, least_recent: bool = True) -> tuple[KT, VT] | None:
+        """Remove and return the least recently used item.
+
+        If least_recent is False, remove and return newest item.
+        """
+        if p := self._lru.popitem(least_recent):
+            return p[0], p[1][0]
+        return None
+
+    @exlock
+    def ttl(self, key: KT):
+        """Return the remaining time to live of an item.
+
+        If the item does not exist, return None.
+        """
+        if self._is_expired(key):
+            del self._lru[key]
+            return None
+        _, entry_time = self._lru[key]
+        return entry_time - datetime.now()
+
+    @exlock
+    def ddl(self, key: KT):
+        """Return the deadline of an item.
+
+        If the item does not exist, return None.
+        """
+        if self._is_expired(key):
+            del self._lru[key]
+            return None
+        return self._lru[key][1]
+
+    @exlock
+    def get(self, key: KT) -> VT | None:
+        """Return the value for key if key is in the dictionary, else None."""
+        if self._is_expired(key):
+            del self._lru[key]
+            return None
+        return self._lru[key][0]
+
+    @exlock
+    def get_with_datetime(self, key: KT) -> tuple[VT, datetime] | None:
+        """Return the value and expiry time for key if key is in the dictionary, else None."""
+        if self._is_expired(key):
+            del self._lru[key]
+            return None
+        return self._lru[key]
+
+    @exlock
+    def set(self, key: KT, value: VT, age: timedelta | int | None = None) -> None:
+        """Set the value for key in the dictionary.
+
+        age is the expiry time of the item. If age is None, the default age is used.
+        """
+        self.__insert_with_age(key, value, age)
+
+    def set_capacity(self, capacity: int) -> None:
+        self._lru.set_size(capacity)
+
+    @classmethod
+    def fromkeys(
+        cls,
+        keys: list[KT],
+        default_value: VT,
+        default_age: timedelta | int,
+        capacity: int | None = None,
+        callback: Callbackable[KT, VT] | None = None,
+    ) -> Self:
+        """Create a new expiringdict with keys from iterable and values set to default_value."""
+        if callback is not None:
+            instance = cls(capacity or len(keys), default_age, callback)
+        else:
+            instance = cls(capacity or len(keys), default_age)
+        for key in keys:
+            instance[key] = default_value
+        return instance
+
+    @classmethod
+    def frommapping(
+        cls,
+        mapping: Mapping[KT, VT],
+        /,
+        default_age: timedelta | int,
+        capacity: int | None = None,
+        callback: Callbackable[KT, VT] | None = None,
+    ) -> Self:
+        """Create a new expiringdict with keys and values from mapping."""
+        if callback is not None:
+            instance = cls(capacity or len(mapping), default_age, callback)
+        else:
+            instance = cls(capacity or len(mapping), default_age)
+        for key, value in mapping.items():
+            instance[key] = value
+        return instance
+
+    @classmethod
+    def fromexpiringdict(
+        cls,
+        exd: "ExpiringDict[KT, VT]",
+        /,
+        default_age: timedelta | int,
+        capacity: int | None = None,
+        callback: Callbackable[KT, VT] | None = None,
+    ) -> Self:
+        """Create a new expiringdict with keys and values from other expiringdict.
+
+        old expiringdict's callback will lost.
+        """
+        if callback is not None:
+            instance = cls(capacity or exd.capacity, default_age, callback or callback)
+        else:
+            instance = cls(capacity or exd.capacity, default_age)
+        now = datetime.now()
+        for key, (value, expiry_time) in exd.viewitems():
+            if expiry_time < now:
+                continue
+            age = expiry_time - now
+            instance[key, age] = value
+        return instance
+
+    @exlock
+    def _is_expired(self, key: KT) -> bool:
+        """Return True if the key is expired, else False."""
+        if key not in self._lru:
+            return True
+        return self._lru[key][1] < datetime.now()
+
+    def __insert_with_age(self, key: KT, value: VT, age: timedelta | int | None):
+        """Insert a new item with specified age."""
+        match age:
+            case int(seconds):
+                self._lru[key] = value, datetime.now() + timedelta(seconds=seconds)
+            case timedelta() as age:
+                self._lru[key] = value, datetime.now() + age
+            case _:
+                self._lru[key] = value, datetime.now() + self.default_age
