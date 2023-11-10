@@ -250,7 +250,7 @@ class ExpiringDict(Generic[KT, VT]):
         return self._lru[key][0]
 
     @exlock
-    def get_with_datetime(self, key: KT) -> tuple[VT, datetime] | None:
+    def get_with_deadtime(self, key: KT) -> tuple[VT, datetime] | None:
         """Return the value and expiry time for key if key is in the dictionary, else None."""
         if self._is_expired(key):
             del self._lru[key]

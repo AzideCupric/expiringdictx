@@ -19,18 +19,18 @@ def test_exdict():
 def test_io(test_exdict: ExpiringDict[str, int]):
     test_exdict["a"] = 1
     assert test_exdict["a"] == 1
-    a = test_exdict.get_with_datetime("a")
+    a = test_exdict.get_with_deadtime("a")
     assert a
     assert a[1] <= datetime.now() + timedelta(seconds=1)
 
     test_exdict["b", 15] = 2
     assert test_exdict.get("b") == 2
-    b = test_exdict.get_with_datetime("b")
+    b = test_exdict.get_with_deadtime("b")
     assert b
     assert datetime.now() + timedelta(seconds=10) < b[1] <= datetime.now() + timedelta(seconds=15)
 
     test_exdict["c", timedelta(minutes=1)] = 3
-    c = test_exdict.get_with_datetime("c")
+    c = test_exdict.get_with_deadtime("c")
     assert c
     assert c[0] == 3
     assert c[1] >= datetime.now() + timedelta(seconds=60) - timedelta(seconds=1)
