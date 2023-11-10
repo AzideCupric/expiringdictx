@@ -18,6 +18,7 @@ def test_get_set(
 ):
     test_scdict["a", timedelta(seconds=1)] = 1
     assert test_scdict["a"] == 1
+    assert test_scdict.get("a") == 1
     assert test_scdict.get("a", value_convert_func=str) == "1"
     test_scdict["b"] = "2"
     assert test_scdict["b"] == "2"
@@ -28,3 +29,4 @@ def test_get_set(
 
     sleep(1)
     assert test_scdict["a"] is None
+    assert test_scdict.get("a") is None
