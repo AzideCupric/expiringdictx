@@ -227,7 +227,8 @@ class ExpiringDict(Generic[KT, VT]):
         If the item does not exist, return None.
         """
         if self._is_expired(key):
-            del self._lru[key]
+            with suppress(KeyError):
+                del self._lru[key]
             return None
         _, entry_time = self._lru[key]
         return entry_time - datetime.now()
@@ -239,7 +240,8 @@ class ExpiringDict(Generic[KT, VT]):
         If the item does not exist, return None.
         """
         if self._is_expired(key):
-            del self._lru[key]
+            with suppress(KeyError):
+                del self._lru[key]
             return None
         return self._lru[key][1]
 
