@@ -90,7 +90,7 @@ pytest tests/
 
 ## 致谢 | Thanks
 
-[`lru-dict`](https://github.com/amitdev/lru-dict): ExpiringDict 的内部存储实现
+[`lru-dict`](https://github.com/amitdev/lru-dict): ExpiringDict 的内部存储实现  
 [`expiringdict`](https://github.com/mailgun/expiringdict): 本项目的灵感来源，在此基础上添加类型注解和其他功能
 
 ## 许可 | License
