@@ -130,12 +130,12 @@ def test_expire(
 
 
 def test_create():
-    keys = ["a", "b", "c"]
-    d1 = ExpiringDict.fromkeys(keys, 1, 10)
+    keys: list[str] = ["a", "b", "c"]
+    d1 = ExpiringDict[str, int].fromkeys(keys, 1, 10)
     assert len(d1) == 3
-    d2 = ExpiringDict.frommapping({"a": 1, "b": 2, "c": 3}, 10)
+    d2 = ExpiringDict[str, int].frommapping({"a": 1, "b": 2, "c": 3}, 10)
     assert len(d2) == 3
-    d3 = ExpiringDict.fromexpiringdict(d2)
+    d3 = ExpiringDict[str, int].fromexpiringdict(d2, 10.1)
     assert len(d3) == 3
 
 

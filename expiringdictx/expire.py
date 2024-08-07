@@ -2,16 +2,18 @@ from functools import wraps
 from threading import RLock
 from contextlib import suppress
 from typing_extensions import Self
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar, Union, Optional, cast, overload
 from datetime import datetime, timedelta
 from collections.abc import Mapping, Callable
 
 from lru import LRU
 
+
 KT = TypeVar("KT")
 VT = TypeVar("VT")
+_T = TypeVar("_T")
 Callbackable = Callable[[KT, tuple[VT, datetime]], None]
-Number = int | float
+Number = TypeVar("Number", int, float)
 
 
 def cleanup_expired(expiringdict_method):
@@ -69,11 +71,11 @@ class ExpiringDict(Generic[KT, VT]):
     def __init__(
         self,
         capacity: int,
-        default_age: timedelta | Number,
-        callback: Callbackable[KT, VT] | None = None,
+        default_age: Union[timedelta, Number],
+        callback: Optional[Callbackable[KT, VT]] = None,
     ) -> None:
         if callback is not None:
-            self._lru: LRU[KT, tuple[VT, datetime]] = LRU(capacity, callback)
+            self._lru: LRU[KT, tuple[VT, datetime]] = LRU(capacity, callback) # pyright: ignore[reportRedeclaration]
         else:
             self._lru: LRU[KT, tuple[VT, datetime]] = LRU(capacity)
         self.default_age = default_age if isinstance(default_age, timedelta) else timedelta(seconds=default_age)
@@ -85,12 +87,14 @@ class ExpiringDict(Generic[KT, VT]):
         return self._lru.get_size()
 
     @exlock
-    def __setitem__(self, _key: tuple[KT, timedelta | Number] | KT, value: VT) -> None:
-        match _key:
-            case k, e:
-                self.__insert_with_age(k, value, e)
-            case k:
-                self.__insert_with_age(k, value, None)
+    def __setitem__(self, _key: Union[tuple[KT, Union[timedelta, Number]], KT], value: VT) -> None:
+        if isinstance(_key, tuple):
+            if TYPE_CHECKING:
+                _key = cast(tuple[KT, Union[timedelta, Number]], _key)
+            key, age = _key
+            self.__insert_with_age(key, value, age)
+        else:
+            self.__insert_with_age(_key, value, None)
 
     @exlock
     def __getitem__(self, key: KT) -> VT:
@@ -161,20 +165,19 @@ class ExpiringDict(Generic[KT, VT]):
         return dict(self._lru).values()
 
     @exlock
-    def update(self, updateable: Mapping[KT, VT | tuple[VT, Number] | tuple[VT, timedelta]], /) -> None:
+    def update(self, updateable: Mapping[KT, Union[VT, tuple[VT, Number], tuple[VT, timedelta]]], /) -> None:
         """Update the dictionary with the key/value pairs from a mapping object.
 
         When value is a tuple, the second element is the age of the item.
         """
         for key, value in updateable.items():
-            match value:
-                case v, e:
-                    self.__insert_with_age(key, v, e)
-                case v:
-                    self.__insert_with_age(key, v, None)
+            if isinstance(value, tuple):
+                self.__insert_with_age(key, value[0], value[1])
+            else:
+                self.__insert_with_age(key, value, None)
 
     @cleanup_expired
-    def refresh(self, key: KT, new_age: timedelta | Number | None = None) -> None:
+    def refresh(self, key: KT, new_age: Optional[Union[timedelta, Number]] = None) -> None:
         """Refresh the expiry time of an existing key.
 
         When `new_age` is None, the default age is used. Otherwise, the new age is used.
@@ -183,7 +186,7 @@ class ExpiringDict(Generic[KT, VT]):
         if key not in self._lru:
             raise KeyError(key)
 
-        if isinstance(new_age, Number):
+        if isinstance(new_age, (int, float)):
             new_age = timedelta(seconds=new_age)
         elif isinstance(new_age, timedelta):
             pass
@@ -199,8 +202,20 @@ class ExpiringDict(Generic[KT, VT]):
         """Remove all items from the dictionary."""
         self._lru.clear()
 
+    @overload
+    def pop(self, key: KT) -> Optional[VT]:
+        ...
+
+    @overload
+    def pop(self, key: KT, default: VT) -> VT:
+        ...
+
+    @overload
+    def pop(self, key: KT, default: _T) -> Union[VT, _T]:
+        ...
+
     @exlock
-    def pop(self, key: KT, default: VT | None = None) -> VT | None:
+    def pop(self, key: KT, default: Optional[Union[VT, _T]] = None) -> Optional[Union[VT, _T]]:
         """Remove specified key and return the corresponding value.
 
         If key is not found, default is returned if given, otherwise KeyError is raised.
@@ -211,7 +226,7 @@ class ExpiringDict(Generic[KT, VT]):
         return p
 
     @exlock
-    def popitem(self, least_recent: bool = True) -> tuple[KT, VT] | None:
+    def popitem(self, least_recent: bool = True) -> Optional[tuple[KT, VT]]:
         """Remove and return the least recently used item.
 
         If least_recent is False, remove and return newest item.
@@ -221,7 +236,7 @@ class ExpiringDict(Generic[KT, VT]):
         return None
 
     @exlock
-    def ttl(self, key: KT):
+    def ttl(self, key: KT) -> Optional[timedelta]:
         """Return the remaining time to live of an item.
 
         If the item does not exist, return None.
@@ -234,7 +249,7 @@ class ExpiringDict(Generic[KT, VT]):
         return entry_time - datetime.now()
 
     @exlock
-    def ddl(self, key: KT):
+    def ddl(self, key: KT) -> Optional[datetime]:
         """Return the deadline of an item.
 
         If the item does not exist, return None.
@@ -245,8 +260,20 @@ class ExpiringDict(Generic[KT, VT]):
             return None
         return self._lru[key][1]
 
+    @overload
+    def get(self, key: KT) -> Optional[VT]:
+        ...
+
+    @overload
+    def get(self, key: KT, default: VT) -> VT:
+        ...
+
+    @overload
+    def get(self, key: KT, default: _T) -> Union[VT, _T]:
+        ...
+
     @exlock
-    def get(self, key: KT, default: VT | None = None) -> VT | None:
+    def get(self, key: KT, default: Optional[Union[VT, _T]] = None) -> Optional[Union[VT, _T]]:
         """Return the value for key if key is in the dictionary, else None."""
         if self._is_expired(key):
             with suppress(KeyError):
@@ -255,7 +282,7 @@ class ExpiringDict(Generic[KT, VT]):
         return self._lru[key][0]
 
     @exlock
-    def get_with_deadtime(self, key: KT) -> tuple[VT, datetime] | None:
+    def get_with_deadtime(self, key: KT) -> Optional[tuple[VT, datetime]]:
         """Return the value and expiry time for key if key is in the dictionary, else None."""
         if self._is_expired(key):
             with suppress(KeyError):
@@ -264,7 +291,7 @@ class ExpiringDict(Generic[KT, VT]):
         return self._lru[key]
 
     @exlock
-    def set(self, key: KT, value: VT, age: timedelta | Number | None = None) -> None:
+    def set(self, key: KT, value: VT, age: Optional[Union[timedelta, Number]] = None) -> None:
         """Set the value for key in the dictionary.
 
         age is the expiry time of the item. If age is None, the default age is used.
@@ -279,9 +306,9 @@ class ExpiringDict(Generic[KT, VT]):
         cls,
         keys: list[KT],
         default_value: VT,
-        default_age: timedelta | Number,
-        capacity: int | None = None,
-        callback: Callbackable[KT, VT] | None = None,
+        default_age: Union[timedelta, Number],
+        capacity: Optional[int] = None,
+        callback: Optional[Callbackable[KT, VT]] = None,
     ) -> Self:
         """Create a new expiringdict with keys from iterable and values set to default_value."""
         if callback is not None:
@@ -296,10 +323,10 @@ class ExpiringDict(Generic[KT, VT]):
     def frommapping(
         cls,
         mapping: Mapping[KT, VT],
+        default_age: Union[timedelta, Number],
         /,
-        default_age: timedelta | Number,
-        capacity: int | None = None,
-        callback: Callbackable[KT, VT] | None = None,
+        capacity: Optional[int] = None,
+        callback: Optional[Callbackable[KT, VT]] = None,
     ) -> Self:
         """Create a new expiringdict with keys and values from mapping."""
         if callback is not None:
@@ -313,11 +340,11 @@ class ExpiringDict(Generic[KT, VT]):
     @classmethod
     def fromexpiringdict(
         cls,
-        exd: "ExpiringDict[KT, VT]",
+        exd: Self,
+        default_age: Union[timedelta, Number],
         /,
-        default_age: timedelta | Number | None = None,
-        capacity: int | None = None,
-        callback: Callbackable[KT, VT] | None = None,
+        capacity: Optional[int] = None,
+        callback: Optional[Callbackable[KT, VT]] = None,
     ) -> Self:
         """Create a new expiringdict with keys and values from other expiringdict.
 
@@ -342,12 +369,11 @@ class ExpiringDict(Generic[KT, VT]):
             return True
         return self._lru[key][1] < datetime.now()
 
-    def __insert_with_age(self, key: KT, value: VT, age: timedelta | Number | None):
+    def __insert_with_age(self, key: KT, value: VT, age: Optional[Union[timedelta, Number]] = None):
         """Insert a new item with specified age."""
-        match age:
-            case seconds if isinstance(seconds, Number):
-                self._lru[key] = value, datetime.now() + timedelta(seconds=seconds)
-            case timedelta() as age:
-                self._lru[key] = value, datetime.now() + age
-            case _:
-                self._lru[key] = value, datetime.now() + self.default_age
+        if isinstance(age, (int, float)):
+            self._lru[key] = value, datetime.now() + timedelta(seconds=age)
+        elif isinstance(age, timedelta):
+            self._lru[key] = value, datetime.now() + age
+        else:
+            self._lru[key] = value, datetime.now() + self.default_age
