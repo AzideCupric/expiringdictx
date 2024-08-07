@@ -35,6 +35,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Publish Package to GitHub Release
-        run: gh release upload --clobber ${{ steps.version.outputs.TAG_NAME }} dist/*
+        run: gh release create --verify-tag ${{ steps.version.outputs.TAG_NAME }} dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
