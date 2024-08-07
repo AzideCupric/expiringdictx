@@ -26,26 +26,6 @@ repository = "https://github.com/AzideCupric/expiringdictx"
 documentation = "https://github.com/AzideCupric/expiringdictx"
 
 
-[tool.pdm]
-[tool.pdm.dev-dependencies]
-lint = [
-  "ruff<1.0.0,>=0.5.6",
-  "isort<6.0.0,>=5.13.2",
-  "black<25.0.0,>=24.8.0",
-  "nonemoji<1.0.0,>=0.1.4",
-  "pre-commit<4.0.0,>=3.8.0",
-]
-test = [
-  "pytest<9.0.0,>=8.3.2",
-  "pytest-cov<6.0.0,>=5.0.0",
-  "pytest-mock<4.0.0,>=3.14.0",
-  "pytest-xdist<4.0.0,>=3.6.1",
-  "loguru<1.0.0,>=0.7.2",
-]
-dev = ["typing-extensions<5.0.0,>=4.12.2"]
-
-[tool.pdm.build]
-includes = ["expiringdictx"]
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
@@ -113,3 +93,34 @@ executionEnvironments = [
 typeCheckingMode = "standard"
 reportShadowedImports = false
 disableBytesTypePromotions = true
+
+[tool.pdm]
+[tool.pdm.dev-dependencies]
+lint = [
+  "ruff<1.0.0,>=0.5.6",
+  "isort<6.0.0,>=5.13.2",
+  "black<25.0.0,>=24.8.0",
+  "nonemoji<1.0.0,>=0.1.4",
+  "pre-commit<4.0.0,>=3.8.0",
+]
+test = [
+  "pytest<9.0.0,>=8.3.2",
+  "pytest-cov<6.0.0,>=5.0.0",
+  "pytest-mock<4.0.0,>=3.14.0",
+  "pytest-xdist<4.0.0,>=3.6.1",
+  "loguru<1.0.0,>=0.7.2",
+]
+dev = ["typing-extensions<5.0.0,>=4.12.2", "bump-my-version>=0.25.0"]
+
+[tool.pdm.build]
+includes = ["expiringdictx"]
+
+[tool.bumpversion]
+current_version = "1.0.1"
+commit = true
+message = ":bookmark: publish v{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = "version = \"{current_version}\""
+replace = "version = \"{new_version}\""
