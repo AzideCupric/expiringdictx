@@ -99,7 +99,7 @@ disableBytesTypePromotions = true
 lint = [
   "ruff<1.0.0,>=0.6.1",
   "isort<6.0.0,>=5.13.2",
-  "black<25.0.0,>=24.8.0",
+  "black<26.5.2,>=26.5.1",
   "nonemoji<1.0.0,>=0.1.4",
   "pre-commit<4.0.0,>=3.8.0",
 ]
