@@ -98,7 +98,7 @@ disableBytesTypePromotions = true
 [tool.pdm.dev-dependencies]
 lint = [
   "ruff<1.0.0,>=0.6.1",
-  "isort<6.0.0,>=5.13.2",
+  "isort<8.0.2,>=8.0.1",
   "black<25.0.0,>=24.8.0",
   "nonemoji<1.0.0,>=0.1.4",
   "pre-commit<4.0.0,>=3.8.0",
